@@ -38,6 +38,24 @@ app.post("/chat", async (req, res) => {
 
     const response = await client.responses.create({
       model: "gpt-4.1-mini",
+      input: userInput
+    });
+
+    res.json({
+      reply: response.output[0].content[0].text
+    });
+
+  } catch (error) {
+    console.error("FULL ERROR:", error);
+
+    res.status(500).json({
+      reply: "Echo error: " + error.message
+    });
+  }
+});
+
+    const response = await client.responses.create({
+      model: "gpt-4.1-mini",
       input: [
         {
           role: "system",
