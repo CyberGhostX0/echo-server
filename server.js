@@ -1,12 +1,36 @@
 const express = require("express");
 const OpenAI = require("openai");
+const fs = require("fs");
+const path = require("path");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-let echoMemory = [];
+const MEMORY_FILE = path.join(__dirname, "echo_memory.json");
+
+function loadMemory() {
+  try {
+    if (fs.existsSync(MEMORY_FILE)) {
+      const data = fs.readFileSync(MEMORY_FILE, "utf8");
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error("Memory load error:", error);
+  }
+  return [];
+}
+
+function saveMemory(memory) {
+  try {
+    fs.writeFileSync(MEMORY_FILE, JSON.stringify(memory, null, 2));
+  } catch (error) {
+    console.error("Memory save error:", error);
+  }
+}
+
+let echoMemory = loadMemory();
 
 const client = new OpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -33,6 +57,7 @@ app.get("/health", (req, res) => {
     provider: "OpenRouter",
     model: "openrouter/free",
     memoryItems: echoMemory.length,
+    permanentMemory: true,
     time: new Date(),
   });
 });
@@ -45,8 +70,10 @@ app.get("/memory", (req, res) => {
 
 app.post("/clear-memory", (req, res) => {
   echoMemory = [];
+  saveMemory(echoMemory);
+
   res.json({
-    reply: "Echo memory cleared.",
+    reply: "Echo permanent memory cleared.",
   });
 });
 
@@ -78,18 +105,25 @@ app.post("/chat", async (req, res) => {
         .trim();
 
       if (memoryText.length > 0) {
-        echoMemory.push(memoryText);
+        echoMemory.push({
+          text: memoryText,
+          createdAt: new Date().toISOString(),
+        });
+
+        saveMemory(echoMemory);
       }
 
       return res.json({
-        reply: `I’ll remember that: ${memoryText}`,
+        reply: `I’ll remember that permanently: ${memoryText}`,
       });
     }
 
     const memoryContext =
       echoMemory.length > 0
-        ? "Here are things you remember about the user:\n" +
-          echoMemory.map((item, index) => `${index + 1}. ${item}`).join("\n")
+        ? "Here are permanent memories about the user:\n" +
+          echoMemory
+            .map((item, index) => `${index + 1}. ${item.text}`)
+            .join("\n")
         : "You do not have saved memory yet.";
 
     const response = await client.chat.completions.create({
