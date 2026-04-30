@@ -42,7 +42,7 @@ app.post("/chat", async (req, res) => {
         {
           role: "system",
           content:
-            "You are Echo, a private personal AI assistant for one user. Be helpful, loyal, clear, calm, and practical.",
+            "You are Echo, a private personal AI assistant. Be helpful, calm, intelligent, and direct.",
         },
         {
           role: "user",
@@ -58,22 +58,7 @@ app.post("/chat", async (req, res) => {
     console.error("Echo error:", error);
 
     res.status(500).json({
-      reply: "Echo had a server error. Check Railway logs.",
-      error: error.message,
-    });
-  }
-});
-
-app.post("/echo", async (req, res) => {
-  try {
-    const userInput = req.body.message || "";
-
-    res.json({
-      reply: "Echo heard: " + userInput,
-    });
-  } catch (error) {
-    res.status(500).json({
-      reply: "Echo had an error.",
+      reply: "Echo had a server error.",
       error: error.message,
     });
   }
