@@ -36,31 +36,18 @@ app.post("/chat", async (req, res) => {
       });
     }
 
-    const response = await client.responses.create({
-      model: "gpt-4.1-mini",
-      input: userInput
-    });
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(500).json({
+        reply: "Echo error: API key missing in Railway.",
+      });
+    }
 
-    res.json({
-      reply: response.output[0].content[0].text
-    });
-
-  } catch (error) {
-    console.error("FULL ERROR:", error);
-
-    res.status(500).json({
-      reply: "Echo error: " + error.message
-    });
-  }
-});
-
-    const response = await client.responses.create({
-      model: "gpt-4.1-mini",
-      input: [
+    const response = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
         {
           role: "system",
-          content:
-            "You are Echo, a private personal AI assistant. Be helpful, calm, intelligent, and direct.",
+          content: "You are Echo, a private personal AI assistant.",
         },
         {
           role: "user",
@@ -70,14 +57,14 @@ app.post("/chat", async (req, res) => {
     });
 
     res.json({
-      reply: response.output_text,
+      reply: response.choices[0].message.content,
     });
+
   } catch (error) {
-    console.error("Echo error:", error);
+    console.error("ECHO ERROR:", error);
 
     res.status(500).json({
-      reply: "Echo had a server error.",
-      error: error.message,
+      reply: "Echo error: " + error.message,
     });
   }
 });
