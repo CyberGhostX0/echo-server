@@ -1,210 +1,145 @@
 const express = require("express");
-const OpenAI = require("openai");
+const cors = require("cors");
 const fs = require("fs");
-const path = require("path");
+require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.use(cors());
 app.use(express.json());
 
-const MEMORY_FILE = path.join(__dirname, "echo_memory.json");
+const MEMORY_FILE = "memory.json";
 
 function loadMemory() {
   try {
-    if (fs.existsSync(MEMORY_FILE)) {
-      return JSON.parse(fs.readFileSync(MEMORY_FILE, "utf8"));
+    if (!fs.existsSync(MEMORY_FILE)) {
+      fs.writeFileSync(MEMORY_FILE, JSON.stringify({ memories: [] }, null, 2));
     }
-  } catch (error) {
-    console.error("Memory load error:", error);
+    return JSON.parse(fs.readFileSync(MEMORY_FILE, "utf8"));
+  } catch {
+    return { memories: [] };
   }
-  return [];
 }
 
 function saveMemory(memory) {
-  try {
-    fs.writeFileSync(MEMORY_FILE, JSON.stringify(memory, null, 2));
-  } catch (error) {
-    console.error("Memory save error:", error);
-  }
+  fs.writeFileSync(MEMORY_FILE, JSON.stringify(memory, null, 2));
 }
-
-let echoMemory = loadMemory();
-
-function alreadyRemembered(text) {
-  return echoMemory.some(
-    item => item.text.toLowerCase() === text.toLowerCase()
-  );
-}
-
-function autoLearnMemory(userInput) {
-  const lower = userInput.toLowerCase();
-
-  const memoryTriggers = [
-    "my name is",
-    "i am",
-    "i'm",
-    "my company is",
-    "my business is",
-    "i want",
-    "my goal is",
-    "my goals are",
-    "i like",
-    "i dislike",
-    "i prefer",
-    "from now on",
-    "going forward",
-    "echo should",
-    "echo needs to"
-  ];
-
-  const shouldSave = memoryTriggers.some(trigger => lower.includes(trigger));
-
-  if (shouldSave && userInput.length > 5 && userInput.length < 300) {
-    if (!alreadyRemembered(userInput)) {
-      echoMemory.push({
-        text: userInput,
-        type: "auto",
-        createdAt: new Date().toISOString(),
-      });
-
-      saveMemory(echoMemory);
-      return true;
-    }
-  }
-
-  return false;
-}
-
-const client = new OpenAI({
-  apiKey: process.env.OPENROUTER_API_KEY,
-  baseURL: "https://openrouter.ai/api/v1",
-  defaultHeaders: {
-    "HTTP-Referer": "https://echo-server-production-f4af.up.railway.app",
-    "X-Title": "Echo",
-  },
-});
 
 app.get("/", (req, res) => {
   res.json({
-    status: "Echo AI server is alive",
-    provider: "OpenRouter",
-    model: "openrouter/free",
-    memoryItems: echoMemory.length,
-    autoMemory: true,
-    time: new Date(),
+    name: "Noctyra Core",
+    status: "online",
+    version: "2.0.0"
   });
 });
 
 app.get("/health", (req, res) => {
   res.json({
-    status: "Echo is alive",
-    provider: "OpenRouter",
-    model: "openrouter/free",
-    memoryItems: echoMemory.length,
-    autoMemory: true,
-    time: new Date(),
+    status: "healthy",
+    server: "Noctyra Core",
+    timestamp: new Date().toISOString()
   });
 });
 
 app.get("/memory", (req, res) => {
-  res.json({
-    memory: echoMemory,
-  });
+  res.json(loadMemory());
 });
 
-app.post("/clear-memory", (req, res) => {
-  echoMemory = [];
-  saveMemory(echoMemory);
+app.post("/remember", (req, res) => {
+  const { text } = req.body;
+
+  if (!text) {
+    return res.status(400).json({ error: "Missing memory text" });
+  }
+
+  const memory = loadMemory();
+
+  memory.memories.push({
+    text,
+    createdAt: new Date().toISOString()
+  });
+
+  saveMemory(memory);
 
   res.json({
-    reply: "Echo memory cleared.",
+    success: true,
+    message: "Memory saved",
+    memory
   });
 });
 
 app.post("/chat", async (req, res) => {
   try {
-    const userInput = req.body.message || "";
+    const { message } = req.body;
 
-    if (!userInput.trim()) {
-      return res.json({
-        reply: "Echo needs a message first.",
-      });
+    if (!message) {
+      return res.status(400).json({ error: "Missing message" });
     }
 
-    if (!process.env.OPENROUTER_API_KEY) {
-      return res.json({
-        reply: "Missing OpenRouter API key.",
-      });
-    }
+    const memory = loadMemory();
 
-    const lowerInput = userInput.toLowerCase();
+    const systemPrompt = `
+You are Noctyra, Alistor's private AI assistant.
 
-    if (
-      lowerInput.startsWith("remember ") ||
-      lowerInput.startsWith("remember that ")
-    ) {
-      const memoryText = userInput
-        .replace(/^remember that /i, "")
-        .replace(/^remember /i, "")
-        .trim();
+Identity:
+- Your name is Noctyra.
+- You are calm, loyal, strategic, protective, and direct.
+- You help Alistor build his private AI system, server, app, OS, business systems, and life infrastructure.
+- You should feel like a Jarvis-style assistant, but darker, more private, and security-focused.
 
-      if (memoryText.length > 0 && !alreadyRemembered(memoryText)) {
-        echoMemory.push({
-          text: memoryText,
-          type: "manual",
-          createdAt: new Date().toISOString(),
-        });
+Current memory:
+${memory.memories.map((m, i) => `${i + 1}. ${m.text}`).join("\n")}
+`;
 
-        saveMemory(echoMemory);
-      }
-
-      return res.json({
-        reply: `I’ll remember that: ${memoryText}`,
-      });
-    }
-
-    const learned = autoLearnMemory(userInput);
-
-    const memoryContext =
-      echoMemory.length > 0
-        ? "Here are saved memories about the user:\n" +
-          echoMemory.map((item, index) => `${index + 1}. ${item.text}`).join("\n")
-        : "You do not have saved memory yet.";
-
-    const response = await client.chat.completions.create({
-      model: "openrouter/free",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are Echo, a private personal AI assistant. Be helpful, calm, direct, practical, and loyal to the user's goals. Use saved memories naturally when helpful.\n\n" +
-            memoryContext,
-        },
-        {
-          role: "user",
-          content: userInput,
-        },
-      ],
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://noctyra-core",
+        "X-Title": "Noctyra Core"
+      },
+      body: JSON.stringify({
+        model: process.env.MODEL || "openai/gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: systemPrompt
+          },
+          {
+            role: "user",
+            content: message
+          }
+        ]
+      })
     });
 
-    const reply =
-      response.choices?.[0]?.message?.content ||
-      "Echo got an empty response.";
+    const data = await response.json();
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        error: "AI provider error",
+        details: data
+      });
+    }
+
+    const reply = data.choices?.[0]?.message?.content || "Noctyra received your message but had no response.";
 
     res.json({
-      reply: learned ? reply + "\n\nMemory updated." : reply,
+      reply,
+      server: "Noctyra Core",
+      model: process.env.MODEL || "openai/gpt-4o-mini"
     });
 
   } catch (error) {
-    console.error("ECHO ERROR:", error);
-
-    res.json({
-      reply: "Echo error: " + error.message,
+    res.status(500).json({
+      error: "Server error",
+      details: error.message
     });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`Echo server running on port ${PORT}`);
+  console.log(`Noctyra Core running on port ${PORT}`);
 });
