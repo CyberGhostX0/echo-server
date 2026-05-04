@@ -1,1 +1,1 @@
-# echo-server
+# noctyra-core
