@@ -1,0 +1,14 @@
+{
+  "name": "noctyra-core",
+  "version": "2.0.0",
+  "description": "Noctyra Core AI Server",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.18.3"
+  }
+}
